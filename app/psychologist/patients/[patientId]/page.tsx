@@ -5,7 +5,8 @@ import { useParams } from 'next/navigation';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/firebase/config';
 import { getUserResponses, getTestTemplate, getUser } from '@/firebase/firestore';
-import { Card, List, Typography, Button, Tag, Empty, Spin, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { Card, List, Typography, Button, Tag, Empty, Spin } from 'antd';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { formatRomanianDate, formatRomanianDateShort } from '@/lib/utils';
 import type { TestResponse, TestTemplate, User } from '@/lib/types';
 import { AuthGuard } from '@/components/AuthGuard';
@@ -31,7 +32,7 @@ export default function PatientDetailPage() {
       const responsesWithTemplates = await Promise.all(
         userResponses.map(async (response) => {
           const template = await getTestTemplate(response.templateId);
-          return { ...response, template };
+          return { ...response, template: template || undefined };
         })
       );
       setResponses(responsesWithTemplates);

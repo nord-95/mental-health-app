@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/firebase/config';
@@ -11,7 +11,7 @@ import type { Invitation } from '@/lib/types';
 
 const { Title, Text } = Typography;
 
-export default function AcceptInvitePage() {
+function AcceptInviteContent() {
   const [loading, setLoading] = useState(false);
   const [invitation, setInvitation] = useState<Invitation | null>(null);
   const [checking, setChecking] = useState(true);
@@ -154,6 +154,18 @@ export default function AcceptInvitePage() {
         </Form>
       </Card>
     </div>
+  );
+}
+
+export default function AcceptInvitePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Spin size="large" />
+      </div>
+    }>
+      <AcceptInviteContent />
+    </Suspense>
   );
 }
 

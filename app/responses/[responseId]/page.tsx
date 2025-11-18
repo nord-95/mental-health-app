@@ -22,7 +22,7 @@ const { Title, Text } = Typography;
 
 export default function ResponseDetailPage() {
   const params = useParams();
-  const responseId = params.responseId as string;
+  const responseId = params?.responseId as string;
   const [response, setResponse] = useState<TestResponse | null>(null);
   const [template, setTemplate] = useState<TestTemplate | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);

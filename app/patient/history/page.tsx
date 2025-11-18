@@ -25,7 +25,7 @@ export default function PatientHistoryPage() {
       const responsesWithTemplates = await Promise.all(
         userResponses.map(async (response) => {
           const template = await getTestTemplate(response.templateId);
-          return { ...response, template };
+          return { ...response, template: template || undefined };
         })
       );
       setResponses(responsesWithTemplates);

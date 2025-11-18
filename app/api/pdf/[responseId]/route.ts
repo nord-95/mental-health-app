@@ -6,10 +6,11 @@ import { formatRomanianDate } from '@/lib/utils';
 // This is a simplified version - in production, use a proper PDF generation library
 export async function GET(
   request: NextRequest,
-  { params }: { params: { responseId: string } }
+  { params }: { params: Promise<{ responseId: string }> }
 ) {
   try {
-    const response = await getResponse(params.responseId);
+    const { responseId } = await params;
+    const response = await getResponse(responseId);
     if (!response) {
       return NextResponse.json({ error: 'Răspuns nu a fost găsit' }, { status: 404 });
     }
@@ -27,7 +28,7 @@ export async function GET(
     return new NextResponse(pdfContent, {
       headers: {
         'Content-Type': 'text/html',
-        'Content-Disposition': `attachment; filename="test-${params.responseId}.html"`,
+        'Content-Disposition': `attachment; filename="test-${responseId}.html"`,
       },
     });
   } catch (error: any) {
