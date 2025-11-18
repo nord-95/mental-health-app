@@ -45,27 +45,34 @@ npm install
    - Obține cheile de configurare
    - Creează `.env.local` cu configurația Firebase
 
-4. **Deploy Firestore Rules:**
+4. **Configurează Email-uri (Resend):**
+   - **IMPORTANT**: Vezi **[EMAIL_SETUP.md](./EMAIL_SETUP.md)** pentru instrucțiuni detaliate
+   - Creează cont pe [Resend.com](https://resend.com)
+   - Obține API Key
+   - Adaugă `RESEND_API_KEY` în `.env.local`
+
+5. **Deploy Firestore Rules:**
    - Copiază conținutul din `firestore.rules` în Firebase Console
    - SAU folosește: `firebase deploy --only firestore:rules`
 
-5. **Parsare teste:**
+6. **Parsare teste:**
 ```bash
 npm run parse-tests
 ```
 Această comandă va citi toate fișierele `.txt` din folderul `tests-data` și le va încărca în Firestore.
 
-6. **Pornește serverul de dezvoltare:**
+7. **Pornește serverul de dezvoltare:**
 ```bash
 npm run dev
 ```
 
 Deschide [http://localhost:3000](http://localhost:3000) în browser.
 
-### 📚 Documentație Firebase
+### 📚 Documentație
 
 - **[FIREBASE_SETUP.md](./FIREBASE_SETUP.md)** - Ghid complet pas cu pas pentru configurarea Firebase
 - **[QUICK_START.md](./QUICK_START.md)** - Ghid rapid pentru configurare în 5 minute
+- **[EMAIL_SETUP.md](./EMAIL_SETUP.md)** - Configurare email-uri cu Resend (invitații și notificări)
 
 ## 📁 Structura Proiectului
 

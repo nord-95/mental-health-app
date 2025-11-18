@@ -57,17 +57,43 @@ export async function createResponseAction(formData: FormData) {
       immutable: true,
     });
 
-    // Get patient's psychologists and send notifications
+    // Get patient's psychologists and send email notifications
     try {
       const { getPatientPsychologists } = await import('@/firebase/firestore');
+      const { getTestTemplate } = await import('@/firebase/firestore');
+      const { sendEmail, generateTestCompletedEmail } = await import('@/lib/email');
+      
       const psychologistIds = await getPatientPsychologists(userId);
       const patient = await getUser(userId);
+      const template = await getTestTemplate(validated.templateId);
       
-      if (psychologistIds.length > 0 && patient) {
-        // TODO: Send email notifications to psychologists via Cloud Functions
-        // For now, we'll log it
-        console.log(`Test completed by ${patient.name} (${patient.email}). Notifying ${psychologistIds.length} psychologist(s).`);
-        console.log('Psychologist IDs:', psychologistIds);
+      if (psychologistIds.length > 0 && patient && template) {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+        
+        // Send email to each psychologist
+        for (const psychologistId of psychologistIds) {
+          try {
+            const psychologist = await getUser(psychologistId);
+            if (psychologist && psychologist.email) {
+              const emailHtml = generateTestCompletedEmail(
+                patient.name,
+                template.title,
+                responseId,
+                appUrl
+              );
+              
+              await sendEmail({
+                to: psychologist.email,
+                subject: `Test completat: ${template.title} - ${patient.name}`,
+                html: emailHtml,
+              });
+              
+              console.log(`Email trimis către psiholog ${psychologist.email}`);
+            }
+          } catch (emailError) {
+            console.error(`Eroare la trimiterea email-ului către psiholog ${psychologistId}:`, emailError);
+          }
+        }
       }
     } catch (notifError) {
       // Don't fail the response creation if notification fails

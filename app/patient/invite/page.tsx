@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '@/firebase/config';
 import { createInvitationAction } from '@/app/actions/invitations';
 import { Form, Input, Button, Card, Typography, message, Alert, Space, Row, Col } from 'antd';
 import { MailOutlined, CopyOutlined, TeamOutlined } from '@ant-design/icons';
@@ -11,11 +13,27 @@ const { Title, Text } = Typography;
 export default function InvitePsychologistPage() {
   const [loading, setLoading] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUserId(user.uid);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   const onFinish = async (values: { psychologistEmail: string }) => {
+    if (!userId) {
+      message.error('Nu ești autentificat');
+      return;
+    }
+
     try {
       setLoading(true);
       const formData = new FormData();
+      formData.append('userId', userId);
       formData.append('psychologistEmail', values.psychologistEmail);
 
       const result = await createInvitationAction(formData);
@@ -23,7 +41,7 @@ export default function InvitePsychologistPage() {
       if (result.error) {
         message.error(result.error);
       } else {
-        message.success('Invitație creată cu succes!');
+        message.success('Invitație creată și email trimis cu succes!');
         setInviteLink(result.inviteLink || null);
       }
     } catch (error: any) {
