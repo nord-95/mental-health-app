@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '@/firebase/config';
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { auth, db } from '@/firebase/config';
 import { getUser, getUserResponses, getAllTestTemplates, getTestSchedule } from '@/firebase/firestore';
-import { Card, Row, Col, Statistic, List, Typography, Button, Empty } from 'antd';
+import { Card, Row, Col, Statistic, List, Typography, Button, Empty, Spin } from 'antd';
 import {
   FileTextOutlined,
   CheckCircleOutlined,
@@ -24,27 +25,71 @@ export default function PatientDashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (!firebaseUser) return;
+    let unsubscribeResponses: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!firebaseUser) {
+        setLoading(false);
+        return;
+      }
 
       const userData = await getUser(firebaseUser.uid);
       if (userData) {
         setUser(userData);
-        const userResponses = await getUserResponses(firebaseUser.uid);
-        setResponses(userResponses);
       }
 
+      // Load templates once
       const allTemplates = await getAllTestTemplates();
       setTemplates(allTemplates);
       setLoading(false);
+
+      // Clean up previous listener if exists
+      if (unsubscribeResponses) {
+        unsubscribeResponses();
+      }
+
+      // Set up real-time listener for responses
+      const responsesQuery = query(
+        collection(db, 'responses'),
+        where('userId', '==', firebaseUser.uid),
+        orderBy('createdAt', 'desc')
+      );
+
+      unsubscribeResponses = onSnapshot(
+        responsesQuery,
+        (snapshot) => {
+          const responsesData = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate() || new Date(),
+          } as TestResponse));
+          setResponses(responsesData);
+        },
+        (error) => {
+          console.error('Error listening to responses:', error);
+        }
+      );
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeResponses) {
+        unsubscribeResponses();
+      }
+    };
   }, []);
 
   const recentResponses = responses.slice(0, 5);
   const totalScore = responses.reduce((sum, r) => sum + r.totalScore, 0);
   const averageScore = responses.length > 0 ? totalScore / responses.length : 0;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Spin size="large" />
+      </div>
+    );
+  }
 
   return (
     <div>

@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '@/firebase/config';
 import { getTestTemplate } from '@/firebase/firestore';
 import { createResponseAction } from '@/app/actions/responses';
 import { Form, Radio, Button, Card, Typography, Space, message, Spin, Divider } from 'antd';
@@ -38,6 +40,13 @@ export default function TakeTestPage() {
     try {
       setSubmitting(true);
       
+      // Get current user
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        message.error('Nu ești autentificat');
+        return;
+      }
+      
       const answers: Answer[] = Object.entries(values).map(([questionId, optionValue]) => {
         const question = template.questions.find(q => q.id === questionId);
         const option = question?.options.find(o => 
@@ -51,6 +60,7 @@ export default function TakeTestPage() {
       });
 
       const formData = new FormData();
+      formData.append('userId', currentUser.uid);
       formData.append('testId', `test_${Date.now()}`);
       formData.append('templateId', template.id);
       formData.append('answers', JSON.stringify(answers));
