@@ -72,19 +72,26 @@ function parseBeckTest(content: string): ParsedTest {
   // Parse sections (A-V) with options (0-3)
   // Look for pattern: "A. TRISTETE" or "A TRISTETE" followed by options "0. ...", "1. ...", etc.
   const sectionRegex = /^([A-V])\.?\s+(.+)$/i;
+  const processedSections = new Set<string>(); // Track processed sections to avoid duplicates
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    
+    // Skip if this is in the scoring section at the end
+    if (line.includes('Itemi') || line.includes('scor') || line.includes('Cum se scorează')) {
+      break;
+    }
     
     // Check for section header (e.g., "A. TRISTETE" or "A TRISTETE")
     const sectionMatch = line.match(sectionRegex);
     if (sectionMatch) {
       const sectionLetter = sectionMatch[1].toUpperCase();
       const sectionName = sectionMatch[2].trim();
+      const sectionKey = `${sectionLetter}_${sectionName}`;
       
-      // Skip if this is in the scoring section at the end
-      if (line.includes('Itemi') || line.includes('scor')) {
-        break;
+      // Skip if we've already processed this section
+      if (processedSections.has(sectionKey)) {
+        continue;
       }
       
       // Collect options for this section (0-3)
@@ -106,7 +113,7 @@ function parseBeckTest(content: string): ParsedTest {
         } else if (optionLine.match(/^[A-V]\.?\s+/i)) {
           // Next section found
           break;
-        } else if (optionLine && !optionLine.match(/^(Itemi|Cum se|NOTA|Raspunsuri|Itemi \/ scor)/i)) {
+        } else if (optionLine && !optionLine.match(/^(Itemi|Cum se|NOTA|Raspunsuri|Itemi \/ scor|Chestionar)/i)) {
           j++;
         } else {
           break;
@@ -114,6 +121,7 @@ function parseBeckTest(content: string): ParsedTest {
       }
       
       if (options.length >= 2) {
+        processedSections.add(sectionKey);
         questions.push({
           id: `section_${sectionLetter}`,
           text: sectionName,
@@ -268,7 +276,11 @@ function parseSCIDTest(content: string): ParsedTest {
   // Extract title and description
   const titleMatch = content.match(/^([^\n]+)/);
   if (titleMatch) {
-    title = titleMatch[1].trim();
+    const extractedTitle = titleMatch[1].trim();
+    // Ensure SCID is in the title for clarity
+    title = extractedTitle.includes('SCID') 
+      ? extractedTitle 
+      : `${extractedTitle} (SCID)`;
   }
   
   // Extract description (everything from "Instructiuni" to first numbered question)

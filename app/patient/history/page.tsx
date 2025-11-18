@@ -46,18 +46,20 @@ export default function PatientHistoryPage() {
   return (
     <AuthGuard requireRole="patient">
       <div>
-        <Title level={2}>Istoric Teste</Title>
+        <Title level={2} className="mb-6">Istoric Teste</Title>
         {responses.length === 0 ? (
-          <Empty description="Nu ai completat încă niciun test" />
+          <Card>
+            <Empty description="Nu ai completat încă niciun test" />
+          </Card>
         ) : (
           <List
             dataSource={responses}
             renderItem={(response) => (
               <List.Item>
-                <Card className="w-full">
+                <Card className="w-full" hoverable>
                   <div className="flex justify-between items-start">
-                    <div>
-                      <Title level={4}>
+                    <div className="flex-1">
+                      <Title level={4} className="mb-2">
                         {response.template?.title || 'Test necunoscut'}
                       </Title>
                       <Text type="secondary" className="block mb-2">

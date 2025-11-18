@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getAllTestTemplates } from '@/firebase/firestore';
-import { Card, List, Button, Typography, Empty, Spin } from 'antd';
+import { Card, List, Button, Typography, Empty, Spin, Row, Col } from 'antd';
 import { FileTextOutlined } from '@ant-design/icons';
 import Link from 'next/link';
 import type { TestTemplate } from '@/lib/types';
@@ -30,36 +30,47 @@ export default function TestsPage() {
 
   return (
     <div>
-      <Title level={2}>Teste Disponibile</Title>
+      <Title level={2} className="mb-6">Teste Disponibile</Title>
+      
       {templates.length === 0 ? (
-        <Empty description="Nu sunt teste disponibile" />
+        <Card>
+          <Empty description="Nu sunt teste disponibile" />
+        </Card>
       ) : (
-        <List
-          grid={{ gutter: 16, xs: 1, sm: 2, md: 3, lg: 4 }}
-          dataSource={templates}
-          renderItem={(template) => (
-            <List.Item>
+        <Row gutter={[16, 16]}>
+          {templates.map((template) => (
+            <Col xs={24} sm={12} md={8} lg={6} key={template.id}>
               <Card
-                title={template.title}
+                title={
+                  <div className="flex items-center gap-2">
+                    <FileTextOutlined />
+                    <span className="truncate">{template.title}</span>
+                  </div>
+                }
                 extra={
                   <Link href={`/tests/${template.id}`}>
-                    <Button type="primary">Completează</Button>
+                    <Button type="primary" size="small">
+                      Completează
+                    </Button>
                   </Link>
                 }
                 className="h-full"
+                hoverable
               >
-                <Text type="secondary">
-                  {template.description?.substring(0, 150) || 'Fără descriere'}
+                <Text type="secondary" className="block mb-4">
+                  {template.description?.substring(0, 120) || 'Fără descriere'}
+                  {template.description && template.description.length > 120 && '...'}
                 </Text>
-                <div className="mt-4">
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                   <Text type="secondary" className="text-sm">
+                    <FileTextOutlined className="mr-1" />
                     {template.questions.length} întrebări
                   </Text>
                 </div>
               </Card>
-            </List.Item>
-          )}
-        />
+            </Col>
+          ))}
+        </Row>
       )}
     </div>
   );
