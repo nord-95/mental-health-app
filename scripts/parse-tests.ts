@@ -4,6 +4,22 @@ import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import type { TestTemplate, Question, QuestionOption } from '../lib/types';
 
+// Load environment variables from .env.local
+const envPath = path.join(process.cwd(), '.env.local');
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, 'utf-8');
+  envContent.split('\n').forEach(line => {
+    const match = line.match(/^([^=]+)=(.*)$/);
+    if (match && !match[1].startsWith('#')) {
+      const key = match[1].trim();
+      const value = match[2].trim().replace(/^["']|["']$/g, '');
+      if (!process.env[key]) {
+        process.env[key] = value;
+      }
+    }
+  });
+}
+
 // Initialize Firebase Admin
 if (!getApps().length) {
   const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
@@ -13,9 +29,17 @@ if (!getApps().length) {
   if (serviceAccount) {
     initializeApp({
       credential: cert(serviceAccount),
+      projectId: serviceAccount.project_id || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    });
+  } else if (process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
+    // Use project ID from environment
+    initializeApp({
+      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
     });
   } else {
-    initializeApp();
+    console.error('❌ Eroare: Nu s-a găsit configurația Firebase!');
+    console.error('   Asigură-te că ai setat FIREBASE_SERVICE_ACCOUNT_KEY sau NEXT_PUBLIC_FIREBASE_PROJECT_ID în .env.local');
+    process.exit(1);
   }
 }
 
@@ -38,68 +62,68 @@ function parseBeckTest(content: string): ParsedTest {
   let title = 'Chestionar Beck';
   let description = '';
   const questions: Question[] = [];
-  let currentSection = '';
-  let questionCounter = 0;
-
-  // Extract title and description
-  const titleMatch = content.match(/Chestionar Beck/i);
-  if (titleMatch) {
-    const introIndex = content.indexOf('Chestionarul cuprinde');
-    if (introIndex !== -1) {
-      description = content.substring(introIndex, content.indexOf('A TRISTETE')).trim();
-    }
+  
+  // Extract description
+  const descMatch = content.match(/Chestionarul cuprinde[\s\S]*?(?=A TRISTETE|Chestionar Beck)/i);
+  if (descMatch) {
+    description = descMatch[0].trim();
   }
-
-  // Parse sections and questions
-  const sectionRegex = /^([A-V])\.?\s+(.+)$/;
-  const questionRegex = /^(\d+)\.\s*(.+)$/;
+  
+  // Parse sections (A-V) with options (0-3)
+  // Look for pattern: "A. TRISTETE" or "A TRISTETE" followed by options "0. ...", "1. ...", etc.
+  const sectionRegex = /^([A-V])\.?\s+(.+)$/i;
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     
-    // Check for section header
+    // Check for section header (e.g., "A. TRISTETE" or "A TRISTETE")
     const sectionMatch = line.match(sectionRegex);
     if (sectionMatch) {
-      currentSection = sectionMatch[1];
-      continue;
-    }
-    
-    // Check for question with options
-    const questionMatch = line.match(questionRegex);
-    if (questionMatch && currentSection) {
-      const questionNumber = parseInt(questionMatch[1]);
-      const questionText = questionMatch[2];
+      const sectionLetter = sectionMatch[1].toUpperCase();
+      const sectionName = sectionMatch[2].trim();
       
-      // Look ahead for options (0, 1, 2, 3)
+      // Skip if this is in the scoring section at the end
+      if (line.includes('Itemi') || line.includes('scor')) {
+        break;
+      }
+      
+      // Collect options for this section (0-3)
       const options: QuestionOption[] = [];
       let j = i + 1;
-      while (j < lines.length && j < i + 5) {
+      
+      while (j < lines.length && j < i + 10) {
         const optionLine = lines[j];
+        
+        // Match pattern: "0. Text" or "0.Text" or "0 Text" (with or without space after dot)
         const optionMatch = optionLine.match(/^(\d+)\.\s*(.+)$/);
         if (optionMatch && ['0', '1', '2', '3'].includes(optionMatch[1])) {
           options.push({
-            label: optionMatch[2],
+            label: optionMatch[2].trim(),
             value: parseInt(optionMatch[1]),
             score: parseInt(optionMatch[1]),
           });
+          j++;
+        } else if (optionLine.match(/^[A-V]\.?\s+/i)) {
+          // Next section found
+          break;
+        } else if (optionLine && !optionLine.match(/^(Itemi|Cum se|NOTA|Raspunsuri|Itemi \/ scor)/i)) {
           j++;
         } else {
           break;
         }
       }
       
-      if (options.length > 0) {
+      if (options.length >= 2) {
         questions.push({
-          id: `${currentSection}_${questionNumber}`,
-          text: questionText,
-          section: currentSection,
+          id: `section_${sectionLetter}`,
+          text: sectionName,
+          section: sectionLetter,
           options,
         });
-        questionCounter++;
       }
     }
   }
-
+  
   // Parse scoring rules
   const scoringRules = {
     interpretation: {
@@ -122,15 +146,13 @@ function parseLeahyAnxietyTest(content: string): ParsedTest {
   let description = '';
   const questions: Question[] = [];
   
-  // Extract scale description
-  const scaleStart = content.indexOf('1 =');
-  const scaleEnd = content.indexOf('INTREBARI:');
-  if (scaleStart !== -1 && scaleEnd !== -1) {
-    description = content.substring(0, scaleEnd).trim();
+  // Extract description (everything before "INTREBARI:")
+  const introIndex = content.indexOf('INTREBARI:');
+  if (introIndex !== -1) {
+    description = content.substring(0, introIndex).trim();
   }
   
-  // Parse questions
-  const questionRegex = /^(\d+)\.\s*(.+)$/;
+  // Standard scale options
   const scaleOptions: QuestionOption[] = [
     { label: 'Nu este deloc adevărat', value: 1, score: 1 },
     { label: 'Adevărat în mică măsură', value: 2, score: 2 },
@@ -138,6 +160,8 @@ function parseLeahyAnxietyTest(content: string): ParsedTest {
     { label: 'Absolut adevărat', value: 4, score: 4 },
   ];
   
+  // Parse questions (1-16)
+  const questionRegex = /^(\d+)\.\s*(.+)$/;
   for (const line of lines) {
     const match = line.match(questionRegex);
     if (match) {
@@ -145,7 +169,7 @@ function parseLeahyAnxietyTest(content: string): ParsedTest {
       if (questionNumber >= 1 && questionNumber <= 16) {
         questions.push({
           id: `q${questionNumber}`,
-          text: match[2],
+          text: match[2].trim(),
           options: scaleOptions,
         });
       }
@@ -167,6 +191,8 @@ function parseCTOCTest(content: string): ParsedTest {
   const descEnd = content.indexOf('Nivel de teama:');
   if (descStart !== -1 && descEnd !== -1) {
     description = content.substring(descStart, descEnd).trim();
+  } else if (descStart !== -1) {
+    description = content.substring(descStart, content.indexOf('Temeri:')).trim();
   }
   
   const scaleOptions: QuestionOption[] = [
@@ -176,7 +202,7 @@ function parseCTOCTest(content: string): ParsedTest {
     { label: 'Foarte mult', value: 3, score: 3 },
   ];
   
-  // Parse fears/obsessions
+  // Parse fears/obsessions (1-14)
   const questionRegex = /^(\d+)\.\s*(.+)$/;
   for (const line of lines) {
     const match = line.match(questionRegex);
@@ -185,7 +211,7 @@ function parseCTOCTest(content: string): ParsedTest {
       if (questionNumber >= 1 && questionNumber <= 14) {
         questions.push({
           id: `fear_${questionNumber}`,
-          text: match[2],
+          text: match[2].trim(),
           options: scaleOptions,
         });
       }
@@ -202,10 +228,10 @@ function parseLearningStylesTest(content: string): ParsedTest {
   let description = '';
   const questions: Question[] = [];
   
-  // Extract description
-  const descEnd = content.indexOf('1. Am opinii');
-  if (descEnd !== -1) {
-    description = content.substring(0, descEnd).trim();
+  // Extract description (everything before first numbered question)
+  const firstQuestionIndex = content.search(/\n1\.\s/);
+  if (firstQuestionIndex !== -1) {
+    description = content.substring(0, firstQuestionIndex).trim();
   }
   
   const binaryOptions: QuestionOption[] = [
@@ -213,7 +239,7 @@ function parseLearningStylesTest(content: string): ParsedTest {
     { label: 'Nu (X)', value: 'X', score: 0 },
   ];
   
-  // Parse questions
+  // Parse questions (1-80)
   const questionRegex = /^(\d+)\.\s*(.+)$/;
   for (const line of lines) {
     const match = line.match(questionRegex);
@@ -222,7 +248,7 @@ function parseLearningStylesTest(content: string): ParsedTest {
       if (questionNumber >= 1 && questionNumber <= 80) {
         questions.push({
           id: `q${questionNumber}`,
-          text: match[2],
+          text: match[2].trim(),
           options: binaryOptions,
         });
       }
@@ -239,11 +265,19 @@ function parseSCIDTest(content: string): ParsedTest {
   let description = '';
   const questions: Question[] = [];
   
-  // Extract description
+  // Extract title and description
+  const titleMatch = content.match(/^([^\n]+)/);
+  if (titleMatch) {
+    title = titleMatch[1].trim();
+  }
+  
+  // Extract description (everything from "Instructiuni" to first numbered question)
   const descStart = content.indexOf('Instructiuni');
-  const descEnd = content.indexOf('1. Ati evitat');
+  const descEnd = content.search(/\n1\.\s/);
   if (descStart !== -1 && descEnd !== -1) {
     description = content.substring(descStart, descEnd).trim();
+  } else if (descStart !== -1) {
+    description = content.substring(descStart, content.indexOf('1.')).trim();
   }
   
   const binaryOptions: QuestionOption[] = [
@@ -251,16 +285,25 @@ function parseSCIDTest(content: string): ParsedTest {
     { label: 'NU', value: 'NU', score: 0 },
   ];
   
-  // Parse questions
+  // Parse questions - handle multi-line questions
   const questionRegex = /^(\d+)\.\s*(.+)$/;
-  for (const line of lines) {
-    const match = line.match(questionRegex);
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(questionRegex);
     if (match) {
       const questionNumber = parseInt(match[1]);
-      if (questionNumber >= 1 && questionNumber <= 119) {
+      if (questionNumber >= 1 && questionNumber <= 200) {
+        let questionText = match[2].trim();
+        
+        // Collect continuation lines until next question or empty line
+        let j = i + 1;
+        while (j < lines.length && !lines[j].match(/^\d+\.\s/) && lines[j]) {
+          questionText += ' ' + lines[j];
+          j++;
+        }
+        
         questions.push({
           id: `q${questionNumber}`,
-          text: match[2],
+          text: questionText.trim(),
           options: binaryOptions,
         });
       }
@@ -278,9 +321,9 @@ function parseSensoryPerceptionTest(content: string): ParsedTest {
   const questions: Question[] = [];
   
   // Extract description
-  const descEnd = content.indexOf('1.      Când');
-  if (descEnd !== -1) {
-    description = content.substring(0, descEnd).trim();
+  const firstQuestionIndex = content.search(/\n1\.\s/);
+  if (firstQuestionIndex !== -1) {
+    description = content.substring(0, firstQuestionIndex).trim();
   }
   
   const options: QuestionOption[] = [
@@ -290,31 +333,38 @@ function parseSensoryPerceptionTest(content: string): ParsedTest {
     { label: 'D', value: 'D', score: 4 },
   ];
   
-  // Parse questions
+  // Parse questions with A-D options
   const questionRegex = /^(\d+)\.\s+(.+)$/;
   for (let i = 0; i < lines.length; i++) {
     const match = lines[i].match(questionRegex);
     if (match) {
       const questionNumber = parseInt(match[1]);
-      if (questionNumber >= 1 && questionNumber <= 15) {
-        // Get question text (may span multiple lines)
+      if (questionNumber >= 1 && questionNumber <= 50) {
         let questionText = match[2];
+        
         // Look for options in next lines
-        const optionLines: string[] = [];
-        for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
-          if (lines[j].match(/^[A-D]\.\s+/)) {
-            optionLines.push(lines[j]);
-          } else if (lines[j].trim() && !lines[j].match(/^\d+\./)) {
-            questionText += ' ' + lines[j];
-          } else {
+        const foundOptions: string[] = [];
+        for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+          const optionMatch = lines[j].match(/^([A-D])\.\s+(.+)$/i);
+          if (optionMatch) {
+            foundOptions.push(optionMatch[2]);
+          } else if (lines[j].match(/^\d+\./)) {
             break;
+          } else if (lines[j] && !lines[j].match(/^(NOTA|Cum se)/i)) {
+            questionText += ' ' + lines[j];
           }
         }
         
         questions.push({
           id: `q${questionNumber}`,
-          text: questionText,
-          options,
+          text: questionText.trim(),
+          options: foundOptions.length > 0 
+            ? foundOptions.map((opt, idx) => ({
+                label: opt,
+                value: String.fromCharCode(65 + idx), // A, B, C, D
+                score: idx + 1,
+              }))
+            : options,
         });
       }
     }
@@ -331,25 +381,25 @@ function parseTemperamentTest(content: string): ParsedTest {
   const questions: Question[] = [];
   
   // Extract description
-  const descEnd = content.indexOf('1. A. Sunt');
-  if (descEnd !== -1) {
-    description = content.substring(0, descEnd).trim();
+  const firstQuestionIndex = content.search(/\n1\.\s+A\.\s/);
+  if (firstQuestionIndex !== -1) {
+    description = content.substring(0, firstQuestionIndex).trim();
   }
   
   // Parse questions with A/B options
-  const questionRegex = /^(\d+)\.\s+A\.\s+(.+)$/;
+  const questionRegex = /^(\d+)\.\s+A\.\s+(.+)$/i;
   for (let i = 0; i < lines.length; i++) {
     const match = lines[i].match(questionRegex);
     if (match) {
       const questionNumber = parseInt(match[1]);
-      const optionAText = match[2];
+      const optionAText = match[2].trim();
       
       // Find option B
       let optionBText = '';
-      if (i + 1 < lines.length && lines[i + 1].match(/^B\.\s+(.+)$/)) {
-        const bMatch = lines[i + 1].match(/^B\.\s+(.+)$/);
+      if (i + 1 < lines.length) {
+        const bMatch = lines[i + 1].match(/^B\.\s+(.+)$/i);
         if (bMatch) {
-          optionBText = bMatch[1];
+          optionBText = bMatch[1].trim();
         }
       }
       
@@ -370,27 +420,46 @@ function parseTemperamentTest(content: string): ParsedTest {
 }
 
 function parseIntelligenceTest(content: string): ParsedTest {
-  // Generic parser for intelligence test
   const lines = content.split('\n').map(l => l.trim()).filter(l => l);
   
-  let title = lines[0] || 'Test de Inteligență';
+  let title = 'Test de Inteligență - Tipuri de Inteligență Multiple';
   let description = '';
   const questions: Question[] = [];
   
-  // Try to detect format and parse accordingly
-  // This is a fallback parser
-  const questionRegex = /^(\d+)\.\s*(.+)$/;
+  // Extract title and description
+  const titleMatch = content.match(/^([^\n]+)/);
+  if (titleMatch) {
+    title = titleMatch[1].trim();
+  }
+  
+  // Extract description (everything before first numbered question)
+  const firstQuestionIndex = content.search(/\n1\.\s/);
+  if (firstQuestionIndex !== -1) {
+    description = content.substring(0, firstQuestionIndex).trim();
+  }
+  
+  // Parse questions (format: "1. Text (number)")
+  const questionRegex = /^(\d+)\.\s+(.+?)(?:\s*\((\d+)\))?$/;
   for (const line of lines) {
     const match = line.match(questionRegex);
     if (match) {
-      questions.push({
-        id: `q${match[1]}`,
-        text: match[2],
-        options: [
-          { label: 'Da', value: 'DA', score: 1 },
-          { label: 'Nu', value: 'NU', score: 0 },
-        ],
-      });
+      const questionNumber = parseInt(match[1]);
+      let questionText = match[2].trim();
+      
+      // Remove the number in parentheses if present
+      questionText = questionText.replace(/\s*\(\d+\)\s*$/, '').trim();
+      
+      if (questionNumber >= 1 && questionNumber <= 100) {
+        // Binary options (true/false for this test)
+        questions.push({
+          id: `q${questionNumber}`,
+          text: questionText,
+          options: [
+            { label: 'Adevărat', value: 'true', score: 1 },
+            { label: 'Fals', value: 'false', score: 0 },
+          ],
+        });
+      }
     }
   }
   
@@ -407,22 +476,22 @@ function detectTestType(filename: string, content: string): string {
   if (lowerFilename.includes('leahy') || lowerContent.includes('scala de anxietate')) {
     return 'leahy';
   }
-  if (lowerFilename.includes('ctoc') || lowerContent.includes('tulburării obsesiv')) {
+  if (lowerFilename.includes('ctoc') || lowerContent.includes('tulburării obsesiv') || lowerContent.includes('obsesii')) {
     return 'ctoc';
   }
-  if (lowerFilename.includes('stiluri') || lowerFilename.includes('învățare')) {
+  if (lowerFilename.includes('stiluri') || lowerFilename.includes('învățare') || lowerFilename.includes('invatare')) {
     return 'learning';
   }
   if (lowerFilename.includes('scid') || lowerContent.includes('chestionar de personalitate')) {
     return 'scid';
   }
-  if (lowerFilename.includes('percepție') || lowerFilename.includes('senzorial')) {
+  if (lowerFilename.includes('percepție') || lowerFilename.includes('senzorial') || lowerFilename.includes('perceptie')) {
     return 'sensory';
   }
   if (lowerFilename.includes('temperament')) {
     return 'temperament';
   }
-  if (lowerFilename.includes('inteligență') || lowerFilename.includes('inteligenta')) {
+  if (lowerFilename.includes('inteligență') || lowerFilename.includes('inteligenta') || lowerFilename.includes('inteligente')) {
     return 'intelligence';
   }
   
@@ -463,11 +532,12 @@ async function parseAndUploadTest(filePath: string): Promise<boolean> {
         parsed = parseIntelligenceTest(content);
         break;
       default:
+        // Try generic parsing
         parsed = parseIntelligenceTest(content);
     }
     
     if (parsed.questions.length === 0) {
-      console.error(`❌ ${filename}: Nu s-au găsit întrebări`);
+      console.error(`❌ ${filename}: Nu s-au găsit întrebări (tip detectat: ${testType})`);
       return false;
     }
     
@@ -540,4 +610,3 @@ async function main() {
 }
 
 main().catch(console.error);
-

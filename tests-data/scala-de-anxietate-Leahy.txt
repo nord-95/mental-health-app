@@ -1,0 +1,30 @@
+Vă rugăm să treceţi în dreptul fiecărui enunţ numărul aferent descrierii care se potriveşte cel mai bine cu modul în care v‐aţi simţit în cursul ultimei luni. În vederea acestui lucru, utilizaţi scala de mai jos:
+
+1 = Nu este deloc adevărat
+2 = Adevărat în mică măsură
+3 = Adevărat în mare măsură
+4 = Absolut adevărat
+
+
+INTREBARI:
+
+1. M‐am simţit slăbit/ă.
+2. Nu am putut să mă relaxez.
+3. Am fost neliniştit/ă.
+4. Am obosit foarte repede.
+5. Am avut dureri de cap.
+6. Scurtare a respiraţiei
+7. Eram ameţit/ă.
+8. Aveam frecvent nevoie să urinez.
+9. Transpiram (indiferent de nivelul de temperatură). 10. Aveam palpitaţii.
+11. Aveam acid la stomac sau dureri de stomac.
+12. Mă enervam foarte uşor.
+13. Tresăream foarte uşor (de a orice).
+14. Aveam probleme de somn.
+15. Îmi era greu să îmi controlez îngrijorările.
+16. Îmi era greu să mă concentrez.
+
+
+NOTA:
+
+Din Planuri de tratament şi intervenţii pentru depresie şi anxietate, de Robert L. Leahy şi Stephen J. Holland.
