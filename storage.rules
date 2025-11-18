@@ -1,0 +1,19 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // PDF-uri exportate pentru răspunsuri
+    match /pdfs/{responseId} {
+      // Permite citirea pentru utilizatori autentificați
+      allow read: if request.auth != null;
+      // Scrierea se face doar prin server (Cloud Functions sau API routes)
+      allow write: if false;
+    }
+    
+    // Alte fișiere (dacă vei adăuga în viitor)
+    match /{allPaths=**} {
+      // Blochează tot restul
+      allow read, write: if false;
+    }
+  }
+}
+

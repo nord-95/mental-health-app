@@ -1,0 +1,111 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
+    function isPsychologist() {
+      return isAuthenticated() && getUserRole() == 'psychologist';
+    }
+    
+    function isPatient() {
+      return isAuthenticated() && getUserRole() == 'patient';
+    }
+    
+    function hasAccessToPatient(patientId) {
+      return isPsychologist() && 
+        exists(/databases/$(database)/documents/patientPsychologistLinks/$(patientId + '_' + request.auth.uid));
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isOwner(userId);
+      allow delete: if false;
+    }
+    
+    // Test Templates collection
+    match /testTemplates/{templateId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Only via admin/scripts
+    }
+    
+    // Responses collection
+    match /responses/{responseId} {
+      allow read: if isAuthenticated() && (
+        isOwner(resource.data.userId) || 
+        hasAccessToPatient(resource.data.userId)
+      );
+      allow create: if isPatient() && 
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.immutable == true;
+      allow update: if false; // Responses are immutable
+      allow delete: if false;
+      
+      // Response views subcollection
+      match /views/{viewId} {
+        allow read: if isAuthenticated() && (
+          isOwner(resource.data.viewerId) ||
+          hasAccessToPatient(get(/databases/$(database)/documents/responses/$(responseId)).data.userId)
+        );
+        allow create: if isPsychologist();
+        allow update: if false;
+        allow delete: if false;
+      }
+    }
+    
+    // Comments collection
+    match /comments/{commentId} {
+      allow read: if isAuthenticated();
+      allow create: if isPsychologist() && 
+        request.resource.data.psychologistId == request.auth.uid;
+      allow update: if isPsychologist() && 
+        resource.data.psychologistId == request.auth.uid;
+      allow delete: if false; // Comments cannot be deleted
+    }
+    
+    // Invitations collection
+    match /invitations/{invitationId} {
+      allow read: if isAuthenticated() && (
+        isOwner(resource.data.fromUserId) ||
+        resource.data.toEmail == request.auth.token.email
+      );
+      allow create: if isPatient() && 
+        request.resource.data.fromUserId == request.auth.uid;
+      allow update: if isAuthenticated() && 
+        resource.data.toEmail == request.auth.token.email;
+      allow delete: if false;
+    }
+    
+    // Patient-Psychologist Links
+    match /patientPsychologistLinks/{linkId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated(); // Created via accept invite
+      allow update: if false;
+      allow delete: if false;
+    }
+    
+    // Test Schedules
+    match /testSchedules/{userId}/{templateId} {
+      allow read: if isAuthenticated() && (
+        isOwner(userId) ||
+        hasAccessToPatient(userId)
+      );
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+  }
+}
+
